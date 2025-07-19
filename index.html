@@ -262,59 +262,16 @@
       function downloadComposite() {
         const editorDiv = document.getElementById('editor-container');
         html2canvas(editorDiv, { backgroundColor: null }).then(canvas2 => {
-          // Convert to blob for sharing
-          canvas2.toBlob(async (blob) => {
-            const fileName = 'oopz-image.png';
-            
-            // Check if running on mobile
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            
-            if (isMobile && navigator.share) {
-              // Use Web Share API for mobile
-              try {
-                const file = new File([blob], fileName, { type: 'image/png' });
-                await navigator.share({
-                  files: [file],
-                  title: 'Save Oopz Image',
-                  text: 'Save your Oopz creation'
-                });
-              } catch (err) {
-                // Fallback to direct download if share is cancelled or fails
-                const link = document.createElement('a');
-                link.download = fileName;
-                link.href = URL.createObjectURL(blob);
-                link.click();
-                URL.revokeObjectURL(link.href);
-              }
-            } else {
-              // Desktop or devices without share capability
-              const link = document.createElement('a');
-              link.download = fileName;
-              link.href = URL.createObjectURL(blob);
-              link.click();
-              URL.revokeObjectURL(link.href);
-            }
-          }, 'image/png');
+          const link = document.createElement('a');
+          link.download = 'oopz-image.png';
+          link.href = canvas2.toDataURL('image/png');
+          link.click();
         });
       }
-
       // --- Download button click ---
       downloadBtn.addEventListener('click', function() {
         if (!imgInit) return;
-        
-        // Show loading state
-        const originalText = downloadBtn.textContent;
-        downloadBtn.textContent = 'Processing...';
-        downloadBtn.disabled = true;
-        
-        // Process and download
         downloadComposite();
-        
-        // Reset button after a short delay
-        setTimeout(() => {
-          downloadBtn.textContent = originalText;
-          downloadBtn.disabled = false;
-        }, 1500);
       });
     });
   </script>
