@@ -29,8 +29,8 @@
     </div>
 
     <div id="editor-container" class="relative w-full max-w-[400px] aspect-[2/3] bg-gray-200 rounded-xl overflow-hidden shadow-inner flex items-center justify-center">
-      <canvas id="editor-canvas" width="400" height="600" class="absolute top-0 left-0 w-full h-full"></canvas>
-      <img id="placeholder-img" src="bgoopz.jpg" alt="Placeholder" class="absolute top-0 left-0 w-full h-full object-cover" />
+      <img id="placeholder-img" src="bgoopz.jpg" alt="Placeholder" class="absolute top-0 left-0 w-full h-full object-cover pointer-events-none" />
+      <canvas id="editor-canvas" width="400" height="600" class="absolute top-0 left-0 w-full h-full opacity-0" />
       <img id="overlay-img" src="frame2.png" alt="Overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none select-none" draggable="false" />
     </div>
 
@@ -102,8 +102,9 @@
         const file = e.target.files[0];
         if (!file) return;
         
-        // Hide placeholder when uploading new image
+        // Hide placeholder and show canvas when uploading new image
         placeholderImg.style.display = 'none';
+        canvas.style.opacity = '1';
         isPlaceholder = false;
         
         const reader = new FileReader();
@@ -125,6 +126,7 @@
 
       // --- Touch support ---
       let lastTouchDistance = 0;
+      let initialScale = 1;
 
       function getTouchDistance(touch1, touch2) {
         return Math.hypot(
@@ -134,12 +136,13 @@
       }
 
       canvas.addEventListener('touchstart', e => {
-        if (isPlaceholder) return; // No touch interaction for placeholder
+        if (isPlaceholder) return;
         if (!imgInit) return;
         e.preventDefault();
         
         if (e.touches.length === 2) {
           lastTouchDistance = getTouchDistance(e.touches[0], e.touches[1]);
+          initialScale = imgScale;
         } else if (e.touches.length === 1) {
           dragging = true;
           const rect = canvas.getBoundingClientRect();
@@ -149,19 +152,22 @@
       });
 
       canvas.addEventListener('touchmove', e => {
-        if (isPlaceholder) return; // No touch interaction for placeholder
+        if (isPlaceholder) return;
         if (!imgInit) return;
         e.preventDefault();
 
         if (e.touches.length === 2) {
-          const distance = getTouchDistance(e.touches[0], e.touches[1]);
-          const diff = distance - lastTouchDistance;
+          const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
           
-          if (Math.abs(diff) > 1) {
-            const zoomFactor = 1 + (diff / 400); // Reduced sensitivity (changed from 200 to 400)
-            imgScale *= zoomFactor;
-            imgScale = Math.min(Math.max(imgScale, 0.5), 2.5); // Reduced max zoom from 5 to 2.5
-            lastTouchDistance = distance;
+          // Calculate scale change based on the ratio of distances
+          const scaleChange = currentDistance / lastTouchDistance;
+          
+          // Apply the scale change relative to initial scale
+          const newScale = initialScale * scaleChange;
+          
+          // Limit the scale within bounds
+          if (newScale >= 0.5 && newScale <= 2.5) {
+            imgScale = newScale;
             drawEditor();
           }
         } else if (dragging && e.touches.length === 1) {
@@ -182,12 +188,14 @@
         dragging = false;
         if (e.touches.length < 2) {
           lastTouchDistance = 0;
+          initialScale = imgScale;
         }
       });
 
       canvas.addEventListener('touchcancel', () => {
         dragging = false;
         lastTouchDistance = 0;
+        initialScale = imgScale;
       });
 
       // --- Zoom controls ---
@@ -229,17 +237,59 @@
       // --- Download composite image ---
       function downloadComposite() {
         const editorDiv = document.getElementById('editor-container');
-        html2canvas(editorDiv, { backgroundColor: null }).then(canvas2 => {
-          const link = document.createElement('a');
-          link.download = 'oopz-image.png';
-          link.href = canvas2.toDataURL('image/png');
-          link.click();
+        html2canvas(editorDiv, { 
+          backgroundColor: null,
+          useCORS: true,
+          scale: 2 // Higher quality output
+        }).then(canvas2 => {
+          // Convert to blob for better mobile handling
+          canvas2.toBlob(function(blob) {
+            if (navigator.userAgent.match(/iphone|android|ipad/i)) {
+              // For mobile devices
+              const img = document.createElement('img');
+              img.src = URL.createObjectURL(blob);
+              
+              // Create temporary link
+              const link = document.createElement('a');
+              link.href = img.src;
+              link.download = 'oopz-photo.png';
+              
+              // Show save prompt
+              if (navigator.share) {
+                // Use Web Share API if available
+                fetch(img.src)
+                  .then(res => res.blob())
+                  .then(blob => {
+                    const file = new File([blob], 'oopz-photo.png', { type: 'image/png' });
+                    navigator.share({
+                      files: [file],
+                      title: 'Save Oopz Photo',
+                    }).catch(console.error);
+                  });
+              } else {
+                // Fallback to normal download
+                link.click();
+              }
+            } else {
+              // For desktop browsers
+              const link = document.createElement('a');
+              link.download = 'oopz-photo.png';
+              link.href = URL.createObjectURL(blob);
+              link.click();
+            }
+          }, 'image/png', 1.0);
         });
       }
+
       // --- Download button click ---
       downloadBtn.addEventListener('click', function() {
-        if (!imgInit) return;
-        downloadComposite();
+        if (!imgInit && isPlaceholder) return;
+        showFeedback('Preparing your photo...', true);
+        setTimeout(() => {
+          downloadComposite();
+          showFeedback('Photo ready!', true);
+          setTimeout(() => showFeedback(''), 2000);
+        }, 100);
       });
     });
   </script>
