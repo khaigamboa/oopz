@@ -30,7 +30,7 @@
 
     <div id="editor-container" class="relative w-full max-w-[400px] aspect-[2/3] bg-gray-200 rounded-xl overflow-hidden shadow-inner flex items-center justify-center">
       <canvas id="editor-canvas" width="400" height="600" class="absolute top-0 left-0 w-full h-full"></canvas>
-      <img id="placeholder-img" src="bgoopz.jpg" alt="Placeholder" class="absolute top-0 left-0 w-full h-full object-cover" style="display: none;" />
+      <img id="placeholder-img" src="bgoopz.jpg" alt="Placeholder" class="absolute top-0 left-0 w-full h-full object-cover" />
       <img id="overlay-img" src="frame2.png" alt="Overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none select-none" draggable="false" />
     </div>
 
@@ -70,6 +70,7 @@
       let dragging = false, lastX = 0, lastY = 0;
       let imgX = 0, imgY = 0, imgScale = 1;
       let imgInit = false;
+      let isPlaceholder = true;
 
       // --- UI Elements ---
       const photoUpload = document.getElementById('photo-upload');
@@ -78,25 +79,15 @@
       const resetBtn = document.getElementById('reset');
       const downloadBtn = document.getElementById('download-btn');
       const feedback = document.getElementById('feedback');
-
-      // Load placeholder image
       const placeholderImg = document.getElementById('placeholder-img');
-      uploadedImgObj.src = placeholderImg.src;
-      uploadedImgObj.onload = function() {
-        // Center and fit image
-        const scale = Math.min(canvas.width / uploadedImgObj.width, canvas.height / uploadedImgObj.height);
-        imgScale = scale;
-        imgX = (canvas.width - uploadedImgObj.width * imgScale) / 2;
-        imgY = (canvas.height - uploadedImgObj.height * imgScale) / 2;
-        imgInit = true;
-        drawEditor();
-        downloadBtn.disabled = false;
-      };
+
+      // Initial state with placeholder
+      downloadBtn.disabled = false;
 
       // --- Helper: Draw everything ---
       function drawEditor() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (uploadedImgObj.src && imgInit) {
+        if (!isPlaceholder && uploadedImgObj.src && imgInit) {
           const w = uploadedImgObj.width * imgScale;
           const h = uploadedImgObj.height * imgScale;
           ctx.drawImage(uploadedImgObj, imgX, imgY, w, h);
@@ -110,6 +101,11 @@
       photoUpload.addEventListener('change', e => {
         const file = e.target.files[0];
         if (!file) return;
+        
+        // Hide placeholder when uploading new image
+        placeholderImg.style.display = 'none';
+        isPlaceholder = false;
+        
         const reader = new FileReader();
         reader.onload = function(ev) {
           uploadedImgObj = new window.Image();
@@ -121,57 +117,10 @@
             imgY = (canvas.height - uploadedImgObj.height * imgScale) / 2;
             imgInit = true;
             drawEditor();
-            downloadBtn.disabled = false;
           };
           uploadedImgObj.src = ev.target.result;
         };
         reader.readAsDataURL(file);
-      });
-
-      // --- Zoom controls ---
-      zoomInBtn.addEventListener('click', () => {
-        if (!imgInit) return;
-        imgScale *= 1.1;
-        // Center zoom
-        imgX -= (uploadedImgObj.width * 0.1 * imgScale) / 2;
-        imgY -= (uploadedImgObj.height * 0.1 * imgScale) / 2;
-        drawEditor();
-      });
-      zoomOutBtn.addEventListener('click', () => {
-        if (!imgInit) return;
-        imgScale /= 1.1;
-        drawEditor();
-      });
-      resetBtn.addEventListener('click', () => {
-        if (!imgInit) return;
-        const scale = Math.min(canvas.width / uploadedImgObj.width, canvas.height / uploadedImgObj.height);
-        imgScale = scale;
-        imgX = (canvas.width - uploadedImgObj.width * imgScale) / 2;
-        imgY = (canvas.height - uploadedImgObj.height * imgScale) / 2;
-        drawEditor();
-      });
-
-      // --- Drag to move image ---
-      canvas.addEventListener('mousedown', e => {
-        if (!imgInit) return;
-        dragging = true;
-        lastX = e.offsetX;
-        lastY = e.offsetY;
-        canvas.classList.add('cursor-grabbing');
-      });
-      window.addEventListener('mouseup', () => {
-        dragging = false;
-        canvas.classList.remove('cursor-grabbing');
-      });
-      canvas.addEventListener('mousemove', e => {
-        if (!dragging || !imgInit) return;
-        const dx = e.offsetX - lastX;
-        const dy = e.offsetY - lastY;
-        imgX += dx;
-        imgY += dy;
-        lastX = e.offsetX;
-        lastY = e.offsetY;
-        drawEditor();
       });
 
       // --- Touch support ---
@@ -185,14 +134,13 @@
       }
 
       canvas.addEventListener('touchstart', e => {
+        if (isPlaceholder) return; // No touch interaction for placeholder
         if (!imgInit) return;
         e.preventDefault();
         
         if (e.touches.length === 2) {
-          // Store initial distance for pinch zoom
           lastTouchDistance = getTouchDistance(e.touches[0], e.touches[1]);
         } else if (e.touches.length === 1) {
-          // Single touch for dragging
           dragging = true;
           const rect = canvas.getBoundingClientRect();
           lastX = e.touches[0].clientX - rect.left;
@@ -201,29 +149,22 @@
       });
 
       canvas.addEventListener('touchmove', e => {
+        if (isPlaceholder) return; // No touch interaction for placeholder
         if (!imgInit) return;
         e.preventDefault();
 
         if (e.touches.length === 2) {
-          // Handle pinch zoom
           const distance = getTouchDistance(e.touches[0], e.touches[1]);
           const diff = distance - lastTouchDistance;
           
-          // Adjust zoom based on pinch movement
-          if (Math.abs(diff) > 1) { // Threshold to prevent tiny fluctuations
-            const zoomFactor = 1 + (diff / 200); // Adjust 200 to change zoom sensitivity
+          if (Math.abs(diff) > 1) {
+            const zoomFactor = 1 + (diff / 400); // Reduced sensitivity (changed from 200 to 400)
             imgScale *= zoomFactor;
-            
-            // Limit zoom range
-            imgScale = Math.min(Math.max(imgScale, 0.5), 5);
-            
-            // Update last distance
+            imgScale = Math.min(Math.max(imgScale, 0.5), 2.5); // Reduced max zoom from 5 to 2.5
             lastTouchDistance = distance;
-            
             drawEditor();
           }
         } else if (dragging && e.touches.length === 1) {
-          // Handle drag
           const rect = canvas.getBoundingClientRect();
           const x = e.touches[0].clientX - rect.left;
           const y = e.touches[0].clientY - rect.top;
@@ -247,6 +188,33 @@
       canvas.addEventListener('touchcancel', () => {
         dragging = false;
         lastTouchDistance = 0;
+      });
+
+      // --- Zoom controls ---
+      zoomInBtn.addEventListener('click', () => {
+        if (isPlaceholder) return; // No zoom for placeholder
+        if (!imgInit) return;
+        imgScale *= 1.05; // Reduced zoom step (changed from 1.1 to 1.05)
+        imgScale = Math.min(imgScale, 2.5); // Reduced max zoom from 5 to 2.5
+        drawEditor();
+      });
+
+      zoomOutBtn.addEventListener('click', () => {
+        if (isPlaceholder) return; // No zoom for placeholder
+        if (!imgInit) return;
+        imgScale /= 1.05; // Reduced zoom step (changed from 1.1 to 1.05)
+        imgScale = Math.max(imgScale, 0.5);
+        drawEditor();
+      });
+
+      resetBtn.addEventListener('click', () => {
+        if (isPlaceholder) return; // No reset for placeholder
+        if (!imgInit) return;
+        const scale = Math.min(canvas.width / uploadedImgObj.width, canvas.height / uploadedImgObj.height);
+        imgScale = scale;
+        imgX = (canvas.width - uploadedImgObj.width * imgScale) / 2;
+        imgY = (canvas.height - uploadedImgObj.height * imgScale) / 2;
+        drawEditor();
       });
 
       // --- Initial draw (just overlay) ---
